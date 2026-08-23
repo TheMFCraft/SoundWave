@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">SoundWave</string>
+    <string name="widget_description">Aktuellen Titel vom Startbildschirm steuern.</string>
+    <string name="widget_idle">Nichts spielt</string>
+    <string name="widget_play">Abspielen</string>
+    <string name="widget_previous">Zurück</string>
+    <string name="widget_next">Weiter</string>
+</resources>

@@ -1,0 +1,3 @@
+PRODUCT_NAME = SoundWave
+PRODUCT_BUNDLE_IDENTIFIER = de.cylone.soundwave
+PRODUCT_COPYRIGHT = Copyright © 2026 de.cylone. All rights reserved.
