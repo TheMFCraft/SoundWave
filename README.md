@@ -51,6 +51,12 @@ flutter build appbundle --release
 | `website/` | Static site for Netlify (privacy policy + landing) |
 | `assets/brand/` | App icon and logo |
 
+## Closed testing
+
+Play testers: [soundwave-testing](https://groups.google.com/g/soundwave-testing)
+
+Join the Google Group, then install the test build from the Play Console opt-in link.
+
 ## Privacy
 
 SoundWave does not use advertising IDs, analytics or accounts.  
