@@ -3,6 +3,8 @@
 Local music player by **Cylone**. SoundWave plays audio that already lives on the device. There is no streaming, no account and no ads.
 
 **Package:** `de.cylone.soundwave`  
+**Play Store:** [play.google.com/store/apps/details?id=de.cylone.soundwave](https://play.google.com/store/apps/details?id=de.cylone.soundwave)  
+**Closed testing:** [play.google.com/apps/testing/de.cylone.soundwave](https://play.google.com/apps/testing/de.cylone.soundwave)  
 **Repository:** [github.com/TheMFCraft/SoundWave](https://github.com/TheMFCraft/SoundWave)
 
 ## Features
@@ -53,9 +55,9 @@ flutter build appbundle --release
 
 ## Closed testing
 
-Play testers: [soundwave-testing](https://groups.google.com/g/soundwave-testing)
-
-Join the Google Group, then install the test build from the Play Console opt-in link.
+1. Join the tester group: [soundwave-testing](https://groups.google.com/g/soundwave-testing)
+2. Open the opt-in page: [play.google.com/apps/testing/de.cylone.soundwave](https://play.google.com/apps/testing/de.cylone.soundwave)
+3. Install from the Play listing: [de.cylone.soundwave](https://play.google.com/store/apps/details?id=de.cylone.soundwave)
 
 ## Privacy
 
