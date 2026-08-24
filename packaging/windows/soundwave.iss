@@ -1,6 +1,6 @@
 #define MyAppName "SoundWave"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.0"
+  #define MyAppVersion "1.1.1"
 #endif
 #define MyAppPublisher "Cylone"
 #define MyAppURL "https://github.com/TheMFCraft/SoundWave"
