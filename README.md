@@ -68,6 +68,23 @@ Privacy policy page: [`website/datenschutz.html`](website/datenschutz.html)
 
 The `website/` folder is a static site. Deploy the folder contents to [Netlify](https://www.netlify.com/) (or set the publish directory to `website`).
 
+## Play protection
+
+The Android app requests a Play Integrity token on startup (license, app and device signals). Playback is never blocked if Play services are missing.
+
+Enable extra verdicts in Play Console → **App-Integrität** / **Play Integrity API**:
+
+- Recent device activity
+- Play Protect status
+- App access risk
+
+Console-only (not in app code):
+
+- **Installationen auf riskanten Geräten verhindern** under Store protection
+- Play Billing protection — skip, SoundWave has no in-app purchases
+
+After this change, upload a new AAB so Play can detect the Integrity API.
+
 ## License
 
 All rights reserved unless a license file is added.

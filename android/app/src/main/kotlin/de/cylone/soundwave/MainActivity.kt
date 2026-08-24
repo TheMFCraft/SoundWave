@@ -36,6 +36,16 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.cylone.soundwave/integrity")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "requestIntegrityToken") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                PlayIntegrity.requestToken(this) { token ->
+                    runOnUiThread { result.success(token) }
+                }
+            }
     }
 
     private fun queryAudio(): ArrayList<HashMap<String, Any?>> {

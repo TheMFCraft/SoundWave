@@ -1,2 +1,3 @@
 -keep class com.ryanheise.audioservice.** { *; }
 -keep class com.ryanheise.just_audio.** { *; }
+-keep class com.google.android.play.core.integrity.** { *; }
