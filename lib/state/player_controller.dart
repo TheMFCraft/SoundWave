@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import '../data/local_fs.dart';
 import '../data/models.dart';
 import '../data/player_widget.dart';
+import '../jam/jam_hooks.dart';
 import 'library_controller.dart';
 
 class PlayerController extends ChangeNotifier {
@@ -15,6 +16,7 @@ class PlayerController extends ChangeNotifier {
 
   final LibraryController library;
   final AudioPlayer _player = AudioPlayer();
+  JamPlaybackGate? jam;
 
   List<Track> queue = [];
   QueueContext context = const QueueContext(
@@ -31,7 +33,21 @@ class PlayerController extends ChangeNotifier {
   bool sleepEndOfTrack = false;
   bool ready = false;
 
-  Stream<Duration> get positionStream => _player.positionStream;
+  List<int> _sourceToQueue = const [];
+  bool _bypassJam = false;
+
+  Stream<Duration> get positionStream =>
+      jam != null && jam!.isGuest && jam!.remotePositionStream != null
+          ? jam!.remotePositionStream!
+          : _player.positionStream;
+
+  Duration get position {
+    if (jam != null && jam!.isGuest && jam!.remotePosition != null) {
+      return jam!.remotePosition!;
+    }
+    return _player.position;
+  }
+
   AudioPlayer get raw => _player;
   Track? get current =>
       queue.isEmpty ? null : queue[index.clamp(0, queue.length - 1)];
@@ -43,6 +59,19 @@ class PlayerController extends ChangeNotifier {
   StreamSubscription<int?>? _indexSub;
   StreamSubscription<Duration?>? _durationSub;
   bool _handlingComplete = false;
+
+  void attachJam(JamPlaybackGate gate) => jam = gate;
+
+  Future<T> runLocal<T>(Future<T> Function() action) async {
+    _bypassJam = true;
+    try {
+      return await action();
+    } finally {
+      _bypassJam = false;
+    }
+  }
+
+  bool get _jamActive => !_bypassJam && jam != null && jam!.isActive;
 
   Future<void> init() async {
     try {
@@ -56,6 +85,7 @@ class PlayerController extends ChangeNotifier {
     await _player.setLoopMode(_loopMode);
 
     _playerSub = _player.playerStateStream.listen((state) {
+      if (jam != null && jam!.isGuest) return;
       playing = state.playing;
       notifyListeners();
       if (state.processingState == ProcessingState.completed) {
@@ -63,8 +93,11 @@ class PlayerController extends ChangeNotifier {
       }
     });
     _indexSub = _player.currentIndexStream.listen((value) {
-      if (value == null || value == index || value >= queue.length) return;
-      index = value;
+      if (jam != null && jam!.isGuest) return;
+      if (value == null) return;
+      final mapped = _mapSourceIndex(value);
+      if (mapped == index || mapped >= queue.length) return;
+      index = mapped;
       notifyListeners();
       final track = current;
       if (track != null) {
@@ -74,6 +107,7 @@ class PlayerController extends ChangeNotifier {
       _schedulePersist();
     });
     _durationSub = _player.durationStream.listen((value) {
+      if (jam != null && jam!.isGuest) return;
       duration = value ?? current?.duration ?? Duration.zero;
       notifyListeners();
     });
@@ -92,7 +126,49 @@ class PlayerController extends ChangeNotifier {
     });
   }
 
+  Future<void> pauseLocalAudio() async {
+    try {
+      await _player.stop();
+    } catch (_) {}
+  }
+
+  void applyGuestSnapshot({
+    required List<Track> tracks,
+    required int index,
+    required bool playing,
+    required Duration duration,
+    required bool shuffle,
+    required PlayRepeat repeat,
+    required double speed,
+  }) {
+    queue = tracks;
+    this.index = tracks.isEmpty ? 0 : index.clamp(0, tracks.length - 1);
+    this.playing = playing;
+    this.duration = duration;
+    this.shuffle = shuffle;
+    this.repeat = repeat;
+    this.speed = speed;
+    context = const QueueContext(kind: QueueKind.queue, name: 'Jam');
+    notifyListeners();
+  }
+
+  Future<void> applyJamPlayerQueue({
+    required List<Track> tracks,
+    required int index,
+    required bool play,
+    Duration position = Duration.zero,
+  }) async {
+    queue = tracks;
+    this.index = tracks.isEmpty ? 0 : index.clamp(0, tracks.length - 1);
+    context = const QueueContext(kind: QueueKind.queue, name: 'Jam');
+    await _loadJam(play: play, position: position);
+  }
+
   Future<void> clearQueue() async {
+    if (_jamActive) {
+      await jam!.commandClear();
+      return;
+    }
     queue = [];
     index = 0;
     await _player.stop();
@@ -106,6 +182,15 @@ class PlayerController extends ChangeNotifier {
     QueueContext? context,
     bool shuffled = false,
   }) async {
+    if (_jamActive) {
+      await jam!.commandPlayTracks(
+        tracks,
+        startIndex: startIndex,
+        context: context,
+        shuffled: shuffled,
+      );
+      return;
+    }
     if (tracks.isEmpty) return;
     final playable = [
       for (final track in tracks)
@@ -123,6 +208,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> playPause() async {
+    if (_jamActive) {
+      await jam!.commandPlayPause();
+      return;
+    }
     if (queue.isEmpty) {
       final fallback = library.moodTracks(Mood.forYou);
       if (fallback.isEmpty) return;
@@ -140,6 +229,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> next() async {
+    if (_jamActive) {
+      await jam!.commandNext();
+      return;
+    }
     if (queue.isEmpty) return;
     try {
       await _player.seekToNext();
@@ -150,6 +243,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> previous() async {
+    if (_jamActive) {
+      await jam!.commandPrevious();
+      return;
+    }
     if (queue.isEmpty) return;
     final position = _player.position;
     if (position > const Duration(seconds: 3)) {
@@ -163,15 +260,29 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    if (_jamActive) {
+      await jam!.commandSeek(position);
+      return;
+    }
+    await _player.seek(position);
+  }
 
   Future<void> skipTo(int nextIndex) async {
+    if (_jamActive) {
+      await jam!.commandSkipTo(nextIndex);
+      return;
+    }
     if (nextIndex < 0 || nextIndex >= queue.length) return;
     await _player.seek(Duration.zero, index: nextIndex);
     await _player.play();
   }
 
   Future<void> toggleShuffle() async {
+    if (_jamActive) {
+      await jam!.commandShuffle();
+      return;
+    }
     shuffle = !shuffle;
     await _player.setShuffleModeEnabled(shuffle);
     if (shuffle) {
@@ -184,6 +295,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> cycleRepeat() async {
+    if (_jamActive) {
+      await jam!.commandRepeat();
+      return;
+    }
     repeat = switch (repeat) {
       PlayRepeat.off => PlayRepeat.all,
       PlayRepeat.all => PlayRepeat.one,
@@ -195,12 +310,20 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> setSpeed(double value) async {
+    if (_jamActive) {
+      await jam!.commandSpeed(value);
+      return;
+    }
     speed = value;
     await _player.setSpeed(value);
     notifyListeners();
   }
 
   Future<void> addNext(Track track) async {
+    if (_jamActive) {
+      await jam!.commandAddNext(track);
+      return;
+    }
     if (!_exists(track)) return;
     if (queue.isEmpty) {
       await playTracks([track]);
@@ -222,6 +345,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> addAllToQueue(List<Track> tracks) async {
+    if (_jamActive) {
+      await jam!.commandAddAll(tracks);
+      return;
+    }
     final playable = [
       for (final track in tracks)
         if (_exists(track)) track,
@@ -244,6 +371,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> removeFromQueue(int removeIndex) async {
+    if (_jamActive) {
+      await jam!.commandRemove(removeIndex);
+      return;
+    }
     if (removeIndex < 0 || removeIndex >= queue.length) return;
     queue = [...queue]..removeAt(removeIndex);
     if (queue.isEmpty) {
@@ -259,6 +390,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> moveQueueItem(int from, int to) async {
+    if (_jamActive) {
+      await jam!.commandMove(from, to);
+      return;
+    }
     if (from == to) return;
     final items = [...queue];
     final item = items.removeAt(from);
@@ -291,10 +426,18 @@ class PlayerController extends ChangeNotifier {
     _sleepTimer = Timer(duration, () async {
       sleepUntil = null;
       sleepEndOfTrack = false;
-      await _player.pause();
+      await pause();
       notifyListeners();
     });
     notifyListeners();
+  }
+
+  Future<void> pause() async {
+    if (_jamActive && jam!.isGuest) {
+      if (playing) await jam!.commandPlayPause();
+      return;
+    }
+    await _player.pause();
   }
 
   Future<void> _onComplete() async {
@@ -328,6 +471,7 @@ class PlayerController extends ChangeNotifier {
     int? restoreIndex,
     Duration position = Duration.zero,
   }) async {
+    _sourceToQueue = const [];
     index = (restoreIndex ?? index).clamp(
       0,
       queue.isEmpty ? 0 : queue.length - 1,
@@ -346,6 +490,48 @@ class PlayerController extends ChangeNotifier {
     if (playingTrack != null) unawaited(library.ensureLyrics(playingTrack.id));
     _schedulePersist();
     notifyListeners();
+  }
+
+  Future<void> _loadJam({
+    required bool play,
+    Duration position = Duration.zero,
+  }) async {
+    final sources = <AudioSource>[];
+    final map = <int>[];
+    for (var i = 0; i < queue.length; i++) {
+      if (!_exists(queue[i])) continue;
+      map.add(i);
+      sources.add(_source(queue[i]));
+    }
+    _sourceToQueue = map;
+    if (sources.isEmpty) {
+      await _player.stop();
+      playing = false;
+      notifyListeners();
+      return;
+    }
+    var sourceIndex = map.indexOf(index);
+    if (sourceIndex < 0) {
+      await _player.pause();
+      playing = false;
+      notifyListeners();
+      return;
+    }
+    await _player.setAudioSources(
+      sources,
+      initialIndex: sourceIndex,
+      initialPosition: position,
+    );
+    await _player.setShuffleModeEnabled(shuffle);
+    await _player.setLoopMode(_loopMode);
+    if (play) await _player.play();
+    notifyListeners();
+  }
+
+  int _mapSourceIndex(int sourceIndex) {
+    if (_sourceToQueue.isEmpty) return sourceIndex;
+    if (sourceIndex < 0 || sourceIndex >= _sourceToQueue.length) return index;
+    return _sourceToQueue[sourceIndex];
   }
 
   AudioSource _source(Track track) {
@@ -381,10 +567,10 @@ class PlayerController extends ChangeNotifier {
   }
 
   LoopMode get _loopMode => switch (repeat) {
-    PlayRepeat.off => LoopMode.off,
-    PlayRepeat.all => LoopMode.all,
-    PlayRepeat.one => LoopMode.one,
-  };
+        PlayRepeat.off => LoopMode.off,
+        PlayRepeat.all => LoopMode.all,
+        PlayRepeat.one => LoopMode.one,
+      };
 
   Future<void> _restore() async {
     final ids = library.settings.lastQueueIds;
@@ -406,6 +592,7 @@ class PlayerController extends ChangeNotifier {
   }
 
   void _schedulePersist() {
+    if (jam != null && jam!.isActive) return;
     _persistTimer?.cancel();
     _persistTimer = Timer(const Duration(seconds: 2), () {
       unawaited(

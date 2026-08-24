@@ -3,6 +3,9 @@ import 'package:path/path.dart' as p;
 bool get isAndroid => false;
 bool get isMacOS => false;
 bool get isLinux => false;
+bool get isWindows => false;
+bool get isIOS => false;
+bool get isDesktop => false;
 
 String? get homeDirectory => null;
 
@@ -12,4 +15,5 @@ List<String> defaultMusicFolders() => const [];
 
 String joinPath(String a, String b) => p.join(a, b);
 
-Future<String?> writeArtworkBytes(String dir, String id, List<int> bytes) async => null;
+Future<String?> writeArtworkBytes(String dir, String id, List<int> bytes) async =>
+    null;

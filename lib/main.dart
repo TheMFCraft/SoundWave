@@ -7,12 +7,18 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'data/play_integrity.dart';
+import 'desktop/window.dart';
+import 'jam/jam.dart';
 import 'state/library_controller.dart';
 import 'state/player_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb) {
+  await initDesktopWindow();
+  final mobile = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  if (mobile) {
     try {
       await JustAudioBackground.init(
         androidNotificationChannelId: 'de.cylone.soundwave.audio',
@@ -27,6 +33,7 @@ Future<void> main() async {
   await library.load();
   final player = PlayerController(library);
   await player.init();
+  final jam = JamController(player: player, library: library);
   unawaited(warmUpPlayIntegrity());
 
   runApp(
@@ -34,6 +41,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider.value(value: library),
         ChangeNotifierProvider.value(value: player),
+        ChangeNotifierProvider.value(value: jam),
       ],
       child: const SoundWaveApp(),
     ),

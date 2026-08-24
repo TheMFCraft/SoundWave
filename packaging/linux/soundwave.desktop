@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=SoundWave
+Comment=Local music player by Cylone
+Exec=soundwave
+Icon=soundwave
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=soundwave

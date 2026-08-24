@@ -1,7 +1,7 @@
 name: soundwave
 description: "SoundWave by Cylone — local music player."
 publish_to: "none"
-version: 1.0.1+2
+version: 1.1.0+3
 
 environment:
   sdk: ^3.12.2
@@ -31,6 +31,14 @@ dependencies:
   rxdart: ^0.28.0
   shared_preferences: ^2.5.5
   http: ^1.6.0
+  bonsoir: ^7.1.5
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  shelf_web_socket: ^3.0.0
+  web_socket_channel: ^3.0.3
+  qr_flutter: ^4.1.0
+  network_info_plus: ^7.0.0
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

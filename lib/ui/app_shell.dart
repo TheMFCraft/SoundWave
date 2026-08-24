@@ -7,6 +7,7 @@ import '../state/library_controller.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import 'home/home_screen.dart';
+import 'jam/jam_banner.dart';
 import 'library/library_screen.dart';
 import 'search/search_screen.dart';
 import 'widgets/mini_player.dart';
@@ -90,6 +91,7 @@ class _AppShellState extends State<AppShell> {
                     child: Column(
                       children: [
                         Expanded(child: body),
+                        const JamBanner(),
                         const MiniPlayer(),
                       ],
                     ),
@@ -104,6 +106,7 @@ class _AppShellState extends State<AppShell> {
             body: Column(
               children: [
                 Expanded(child: body),
+                const JamBanner(),
                 const MiniPlayer(),
               ],
             ),

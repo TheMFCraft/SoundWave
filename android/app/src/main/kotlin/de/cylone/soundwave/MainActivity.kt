@@ -1,7 +1,11 @@
 package de.cylone.soundwave
 
 import android.content.ContentUris
+import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -9,6 +13,7 @@ import com.ryanheise.audioservice.AudioServiceActivity
 
 class MainActivity : AudioServiceActivity() {
     private val channelName = "de.cylone.soundwave/media"
+    private var hotspotReservation: WifiManager.LocalOnlyHotspotReservation? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,6 +51,67 @@ class MainActivity : AudioServiceActivity() {
                     runOnUiThread { result.success(token) }
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "de.cylone.soundwave/jam")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startLocalHotspot" -> startLocalHotspot(result)
+                    "stopLocalHotspot" -> {
+                        stopLocalHotspot()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun startLocalHotspot(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            result.error("UNSUPPORTED", "Local hotspot requires Android 8+", null)
+            return
+        }
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        try {
+            wifi.startLocalOnlyHotspot(
+                object : WifiManager.LocalOnlyHotspotCallback() {
+                    override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
+                        hotspotReservation = reservation
+                        result.success(hotspotCredentials(reservation))
+                    }
+
+                    override fun onFailed(reason: Int) {
+                        result.error("FAILED", "Hotspot failed: $reason", null)
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
+        } catch (error: Exception) {
+            result.error("FAILED", error.message, null)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hotspotCredentials(reservation: WifiManager.LocalOnlyHotspotReservation): HashMap<String, String> {
+        val map = HashMap<String, String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val sap = reservation.softApConfiguration
+            val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                sap.wifiSsid?.toString()?.trim('"') ?: ""
+            } else {
+                sap.ssid ?: ""
+            }
+            map["ssid"] = ssid
+            map["password"] = sap.passphrase ?: ""
+        } else {
+            val conf = reservation.wifiConfiguration
+            map["ssid"] = conf?.SSID?.trim('"') ?: ""
+            map["password"] = conf?.preSharedKey ?: ""
+        }
+        return map
+    }
+
+    private fun stopLocalHotspot() {
+        hotspotReservation?.close()
+        hotspotReservation = null
     }
 
     private fun queryAudio(): ArrayList<HashMap<String, Any?>> {

@@ -338,7 +338,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'SoundWave spielt Musik, die bereits auf diesem Gerät liegt. Playlists, Likes und Mix-Verlauf bleiben privat.';
+      'SoundWave spielt Musik, die bereits auf diesem Gerät liegt. Playlists, Likes und Mix-Verlauf bleiben privat. Jam verbindet Geräte nur im lokalen Netz.';
 
   @override
   String version(String value) {
@@ -439,4 +439,115 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get widgetNothingPlaying => 'Nichts spielt';
+
+  @override
+  String get jamTitle => 'Jam';
+
+  @override
+  String get jamBody =>
+      'Eine Jam bleibt lokal: Ein Gerät spielt, die anderen steuern mit und schicken fehlende Dateien nur für die Session rüber.';
+
+  @override
+  String get jamStart => 'Jam starten (dieses Gerät spielt)';
+
+  @override
+  String get jamNearby => 'Jams im WLAN';
+
+  @override
+  String get jamSearching => 'Suche nach Jams…';
+
+  @override
+  String get jamNoneNearby =>
+      'Keine Jam in der Nähe. Starte eine oder tritt per IP und PIN bei.';
+
+  @override
+  String get jamManual => 'Manuell beitreten';
+
+  @override
+  String get jamHostHint => 'IP:Port oder soundwave:// Link';
+
+  @override
+  String get jamPin => 'PIN';
+
+  @override
+  String get jamJoin => 'Beitreten';
+
+  @override
+  String jamJoinName(String name) {
+    return '„$name“ beitreten';
+  }
+
+  @override
+  String get jamLeave => 'Jam verlassen';
+
+  @override
+  String get jamYouArePlayer => 'Dieses Gerät ist der Player';
+
+  @override
+  String get jamYouAreGuest => 'Du hörst über den Player mit';
+
+  @override
+  String get jamNoIp =>
+      'Keine lokale IP gefunden. Prüfe WLAN oder starte einen Hotspot.';
+
+  @override
+  String get jamCopied => 'Link kopiert';
+
+  @override
+  String get jamCopyLink => 'Beitrittslink kopieren';
+
+  @override
+  String get jamHotspot => 'Hotspot für Gäste starten';
+
+  @override
+  String get jamHotspotStop => 'Hotspot stoppen';
+
+  @override
+  String jamHotspotActive(String ssid, String password) {
+    return 'Hotspot $ssid · Passwort $password';
+  }
+
+  @override
+  String get jamMembers => 'Teilnehmer';
+
+  @override
+  String get jamRolePlayer => 'Player';
+
+  @override
+  String get jamRoleGuest => 'Steuert mit';
+
+  @override
+  String get jamUnsupported => 'Jam ist in der Web-Version nicht verfügbar.';
+
+  @override
+  String jamHosting(int count) {
+    return 'Jam aktiv · Player · $count Geräte';
+  }
+
+  @override
+  String jamListening(String name) {
+    return 'Jam · Player: $name';
+  }
+
+  @override
+  String jamAddedBy(String name) {
+    return 'Von $name';
+  }
+
+  @override
+  String get jamTransferPending => 'Wartet auf Datei';
+
+  @override
+  String jamTransferProgress(int percent) {
+    return 'Übertragung $percent%';
+  }
+
+  @override
+  String get jamTransferFailed => 'Übertragung fehlgeschlagen';
+
+  @override
+  String get jamTransferReady => 'Bereit';
+
+  @override
+  String get jamTransferLocal => 'Lokal';
 }

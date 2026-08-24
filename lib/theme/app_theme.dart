@@ -23,6 +23,8 @@ abstract final class AppTheme {
           TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
           TargetPlatform.macOS: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
         },
       ),
       appBarTheme: AppBarTheme(

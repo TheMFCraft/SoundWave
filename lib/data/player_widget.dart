@@ -9,7 +9,7 @@ Future<void> syncPlayerWidget({
   required Track? track,
   required bool playing,
 }) async {
-  if (kIsWeb) return;
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
   try {
     await _channel.invokeMethod<void>('updatePlayerWidget', {
       'title': track?.title ?? '',

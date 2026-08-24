@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/library_controller.dart';
 import '../../state/player_controller.dart';
 import '../../theme/colors.dart';
+import '../jam/jam_screen.dart';
 import '../library/collection_screen.dart';
 import '../playlist/playlist_picker.dart';
 import '../widgets/artwork.dart';
@@ -313,6 +314,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 ? SwColors.secondary
                                 : SwColors.onSurfaceVariant,
                           ),
+                        ),
+                        IconButton(
+                          tooltip: l10n.jamTitle,
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(builder: (_) => const JamScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.graphic_eq_rounded),
                         ),
                         IconButton(
                           tooltip: l10n.queue,

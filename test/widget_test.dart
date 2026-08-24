@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundwave/data/catalog.dart';
 import 'package:soundwave/data/models.dart';
+import 'package:soundwave/jam/jam_match.dart';
+import 'package:soundwave/jam/jam_models.dart';
+import 'package:soundwave/jam/jam_protocol.dart';
 
 void main() {
   test('search ranks title hits first', () {
@@ -41,5 +44,46 @@ void main() {
     expect(copy.liked, isTrue);
     expect(copy.playCount, 4);
     expect(copy.title, 'Neon');
+  });
+
+  test('jam protocol roundtrip', () {
+    const message = JamMessage('join', {'pin': '123456', 'host': '192.168.1.8'});
+    final parsed = JamMessage.decode(message.encode());
+    expect(parsed.type, 'join');
+    expect(parsed.data['pin'], '123456');
+    expect(parsed.data['host'], '192.168.1.8');
+  });
+
+  test('local match uses title artist and duration', () {
+    final library = [
+      Track(
+        id: 'local',
+        title: 'Midnight Drive',
+        artist: 'Nova',
+        album: 'Night',
+        uri: '/music/a.mp3',
+        durationMs: 183400,
+        addedAt: DateTime(2026),
+      ),
+    ];
+    expect(
+      findLocalMatch(library, title: 'midnight drive', artist: 'Nova', durationMs: 183000)?.id,
+      'local',
+    );
+    expect(
+      jamNeedsTransfer(library: library, title: 'Other', artist: 'Nova', durationMs: 183400),
+      isTrue,
+    );
+  });
+
+  test('join info parses uri and host port pin', () {
+    final fromUri = JamJoinInfo.tryParse('soundwave://jam?h=10.0.0.4&p=47831&c=042001');
+    expect(fromUri?.host, '10.0.0.4');
+    expect(fromUri?.port, 47831);
+    expect(fromUri?.pin, '042001');
+    final fromText = JamJoinInfo.tryParse('192.168.1.9:9000 111222');
+    expect(fromText?.host, '192.168.1.9');
+    expect(fromText?.port, 9000);
+    expect(fromText?.pin, '111222');
   });
 }

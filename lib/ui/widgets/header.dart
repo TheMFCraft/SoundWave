@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
+import '../jam/jam_screen.dart';
 import '../settings/settings_screen.dart';
 
 class SoundWaveHeader extends StatelessWidget {
@@ -48,6 +49,13 @@ class SoundWaveHeader extends StatelessWidget {
             ),
       ),
       actions: [
+        IconButton(
+          tooltip: l10n.jamTitle,
+          onPressed: () {
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const JamScreen()));
+          },
+          icon: const Icon(Icons.graphic_eq_rounded, color: SwColors.secondary),
+        ),
         IconButton(
           tooltip: l10n.settings,
           onPressed: () {

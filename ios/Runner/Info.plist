@@ -30,6 +30,12 @@
 	<string>SoundWave liest lokale Audiodateien, damit du deine eigene Musik abspielen kannst.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>SoundWave importiert Musik aus deinen Dateien.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>SoundWave findet Jams im lokalen Netz und überträgt Songs nur zwischen euren Geräten.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_soundwave._tcp</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

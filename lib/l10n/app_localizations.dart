@@ -707,7 +707,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutBody.
   ///
   /// In en, this message translates to:
-  /// **'SoundWave plays music that already lives on this device. Playlists, likes and mix history stay private.'**
+  /// **'SoundWave plays music that already lives on this device. Playlists, likes and mix history stay private. Jam only talks to other devices on the local network.'**
   String get aboutBody;
 
   /// No description provided for @version.
@@ -895,6 +895,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing playing'**
   String get widgetNothingPlaying;
+
+  /// No description provided for @jamTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Jam'**
+  String get jamTitle;
+
+  /// No description provided for @jamBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A jam stays local: one device plays, everyone else can control playback, and missing files are copied to the player only for the session.'**
+  String get jamBody;
+
+  /// No description provided for @jamStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start jam (this device plays)'**
+  String get jamStart;
+
+  /// No description provided for @jamNearby.
+  ///
+  /// In en, this message translates to:
+  /// **'Jams on this network'**
+  String get jamNearby;
+
+  /// No description provided for @jamSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for jams…'**
+  String get jamSearching;
+
+  /// No description provided for @jamNoneNearby.
+  ///
+  /// In en, this message translates to:
+  /// **'No jam nearby. Start one or join with IP and PIN.'**
+  String get jamNoneNearby;
+
+  /// No description provided for @jamManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Join manually'**
+  String get jamManual;
+
+  /// No description provided for @jamHostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'IP:port or soundwave:// link'**
+  String get jamHostHint;
+
+  /// No description provided for @jamPin.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN'**
+  String get jamPin;
+
+  /// No description provided for @jamJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get jamJoin;
+
+  /// No description provided for @jamJoinName.
+  ///
+  /// In en, this message translates to:
+  /// **'Join “{name}”'**
+  String jamJoinName(String name);
+
+  /// No description provided for @jamLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave jam'**
+  String get jamLeave;
+
+  /// No description provided for @jamYouArePlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is the player'**
+  String get jamYouArePlayer;
+
+  /// No description provided for @jamYouAreGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'You’re listening through the player'**
+  String get jamYouAreGuest;
+
+  /// No description provided for @jamNoIp.
+  ///
+  /// In en, this message translates to:
+  /// **'No local IP found. Check Wi-Fi or start a hotspot.'**
+  String get jamNoIp;
+
+  /// No description provided for @jamCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied'**
+  String get jamCopied;
+
+  /// No description provided for @jamCopyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy join link'**
+  String get jamCopyLink;
+
+  /// No description provided for @jamHotspot.
+  ///
+  /// In en, this message translates to:
+  /// **'Start hotspot for guests'**
+  String get jamHotspot;
+
+  /// No description provided for @jamHotspotStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop hotspot'**
+  String get jamHotspotStop;
+
+  /// No description provided for @jamHotspotActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Hotspot {ssid} · password {password}'**
+  String jamHotspotActive(String ssid, String password);
+
+  /// No description provided for @jamMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get jamMembers;
+
+  /// No description provided for @jamRolePlayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Player'**
+  String get jamRolePlayer;
+
+  /// No description provided for @jamRoleGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Can control'**
+  String get jamRoleGuest;
+
+  /// No description provided for @jamUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Jam isn’t available in the web build.'**
+  String get jamUnsupported;
+
+  /// No description provided for @jamHosting.
+  ///
+  /// In en, this message translates to:
+  /// **'Jam live · player · {count} devices'**
+  String jamHosting(int count);
+
+  /// No description provided for @jamListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Jam · player: {name}'**
+  String jamListening(String name);
+
+  /// No description provided for @jamAddedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Added by {name}'**
+  String jamAddedBy(String name);
+
+  /// No description provided for @jamTransferPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for file'**
+  String get jamTransferPending;
+
+  /// No description provided for @jamTransferProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer {percent}%'**
+  String jamTransferProgress(int percent);
+
+  /// No description provided for @jamTransferFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer failed'**
+  String get jamTransferFailed;
+
+  /// No description provided for @jamTransferReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get jamTransferReady;
+
+  /// No description provided for @jamTransferLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device'**
+  String get jamTransferLocal;
 }
 
 class _AppLocalizationsDelegate
