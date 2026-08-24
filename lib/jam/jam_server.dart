@@ -16,6 +16,7 @@ class JamServer {
   final _memberOfSocket = <String, String>{};
   void Function(String socketId, JamMessage message)? onMessage;
   void Function(String socketId, String? memberId)? onDisconnect;
+  Future<String?> Function(String token, Stream<List<int>> body, int? length)? onUpload;
 
   int get port => _server?.port ?? 0;
   bool get isRunning => _server != null;
@@ -41,7 +42,21 @@ class JamServer {
           pingInterval: const Duration(seconds: 20),
         ),
       )
-      ..get('/health', (_) => Response.ok('ok'));
+      ..get('/health', (_) => Response.ok('ok'))
+      ..put('/upload/<token>', (Request request, String token) async {
+        if (!RegExp(r'^[a-zA-Z0-9-]+$').hasMatch(token)) {
+          return Response.badRequest(body: 'bad token');
+        }
+        final handler = onUpload;
+        if (handler == null) return Response.forbidden('no upload');
+        try {
+          final path = await handler(token, request.read(), request.contentLength);
+          if (path == null) return Response.notFound('unknown token');
+          return Response.ok('ok');
+        } catch (_) {
+          return Response.internalServerError(body: 'upload failed');
+        }
+      });
 
     _server = await io.serve(router.call, InternetAddress.anyIPv4, 0);
     return _server!.port;

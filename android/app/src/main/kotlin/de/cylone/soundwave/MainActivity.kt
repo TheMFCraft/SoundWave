@@ -29,6 +29,15 @@ class MainActivity : AudioServiceActivity() {
                             result.success(loadAlbumArt(albumId))
                         }
                     }
+                    "copyAudioToPath" -> {
+                        val src = call.argument<String>("src")
+                        val dest = call.argument<String>("dest")
+                        if (src.isNullOrBlank() || dest.isNullOrBlank()) {
+                            result.error("ARG", "missing src/dest", null)
+                        } else {
+                            copyAudioToPath(src, dest, result)
+                        }
+                    }
                     "updatePlayerWidget" -> {
                         val title = call.argument<String>("title") ?: ""
                         val artist = call.argument<String>("artist") ?: ""
@@ -174,6 +183,37 @@ class MainActivity : AudioServiceActivity() {
             }
         }
         return songs
+    }
+
+    private fun copyAudioToPath(src: String, dest: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val outFile = java.io.File(dest)
+                outFile.parentFile?.mkdirs()
+                val input = openAudioStream(src) ?: throw IllegalStateException("cannot open audio")
+                input.use { ins ->
+                    outFile.outputStream().use { outs -> ins.copyTo(outs) }
+                }
+                Handler(Looper.getMainLooper()).post { result.success(true) }
+            } catch (e: Exception) {
+                Handler(Looper.getMainLooper()).post {
+                    result.error("IO", e.message, null)
+                }
+            }
+        }.start()
+    }
+
+    private fun openAudioStream(src: String): java.io.InputStream? {
+        if (src.startsWith("content:") || src.startsWith("file:")) {
+            return contentResolver.openInputStream(android.net.Uri.parse(src))
+        }
+        val file = java.io.File(src)
+        if (file.exists()) return file.inputStream()
+        return try {
+            contentResolver.openInputStream(android.net.Uri.fromFile(file))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun loadAlbumArt(albumId: Long): ByteArray? {

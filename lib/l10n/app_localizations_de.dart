@@ -550,4 +550,20 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get jamTransferLocal => 'Lokal';
+
+  @override
+  String get jamLibraryChip => 'Andere Geräte';
+
+  @override
+  String jamLibraryFrom(String name) {
+    return 'Von $name';
+  }
+
+  @override
+  String get jamLibraryEmpty =>
+      'Noch keine Titel vom anderen Gerät. Die Liste kommt, sobald die Jam verbunden ist.';
+
+  @override
+  String get jamLibraryBody =>
+      'Titel auf anderen Geräten in dieser Jam. Tippe, um sie auf dem Player abzuspielen.';
 }

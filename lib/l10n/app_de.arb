@@ -170,5 +170,10 @@
   "@jamTransferProgress": {"placeholders": {"percent": {"type": "int"}}},
   "jamTransferFailed": "Übertragung fehlgeschlagen",
   "jamTransferReady": "Bereit",
-  "jamTransferLocal": "Lokal"
+  "jamTransferLocal": "Lokal",
+  "jamLibraryChip": "Andere Geräte",
+  "jamLibraryFrom": "Von {name}",
+  "@jamLibraryFrom": {"placeholders": {"name": {"type": "String"}}},
+  "jamLibraryEmpty": "Noch keine Titel vom anderen Gerät. Die Liste kommt, sobald die Jam verbunden ist.",
+  "jamLibraryBody": "Titel auf anderen Geräten in dieser Jam. Tippe, um sie auf dem Player abzuspielen."
 }

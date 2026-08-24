@@ -81,39 +81,34 @@ class JamClient {
   }
 }
 
-Future<void> downloadJamFile({
+Future<void> uploadJamFile({
   required String host,
   required int port,
   required String token,
-  required String destPath,
-  required void Function(int received, int total) onProgress,
+  required String path,
 }) async {
+  final file = File(path);
+  if (!file.existsSync()) {
+    throw const FileSystemException('missing file');
+  }
+  final length = await file.length();
+  if (length <= 0) throw const HttpException('empty file');
+  if (length > 100 * 1024 * 1024) {
+    throw const HttpException('file too large');
+  }
   final client = HttpClient();
   try {
-    final request = await client.getUrl(Uri.parse('http://$host:$port/file/$token'));
-    final response = await request.close().timeout(const Duration(seconds: 20));
+    final request = await client.putUrl(
+      Uri(scheme: 'http', host: host, port: port, path: '/upload/$token'),
+    );
+    request.headers.contentType = ContentType('application', 'octet-stream');
+    request.contentLength = length;
+    await request.addStream(file.openRead());
+    final response = await request.close().timeout(const Duration(minutes: 5));
     if (response.statusCode != 200) {
-      throw HttpException('transfer failed (${response.statusCode})');
+      throw HttpException('upload failed (${response.statusCode})');
     }
-    final total = response.contentLength;
-    if (total > 100 * 1024 * 1024) {
-      throw const HttpException('file too large');
-    }
-    final file = File(destPath);
-    await file.parent.create(recursive: true);
-    final sink = file.openWrite();
-    var received = 0;
-    await for (final chunk in response) {
-      received += chunk.length;
-      if (received > 100 * 1024 * 1024) {
-        await sink.close();
-        await file.delete();
-        throw const HttpException('file too large');
-      }
-      sink.add(chunk);
-      onProgress(received, total > 0 ? total : received);
-    }
-    await sink.close();
+    await response.drain<void>();
   } finally {
     client.close(force: true);
   }

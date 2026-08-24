@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
+import '../../jam/jam.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/library_controller.dart';
 import '../../state/player_controller.dart';
@@ -31,6 +32,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final l10n = AppLocalizations.of(context);
     final library = context.watch<LibraryController>();
     final player = context.watch<PlayerController>();
+    final jam = context.watch<JamController>();
+    final otherLibraries = [
+      for (final lib in jam.remoteLibraries)
+        if (lib.memberId != jam.memberId) lib,
+    ];
+    if (_filter == LibraryFilter.jam && !jam.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _filter = LibraryFilter.all);
+      });
+    }
 
     return AdaptivePage(
       padding: EdgeInsets.zero,
@@ -103,11 +114,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     selected: _filter == LibraryFilter.all,
                     onTap: () => setState(() => _filter = LibraryFilter.all),
                   ),
+                  if (jam.isActive) ...[
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: l10n.jamLibraryChip,
+                      selected: _filter == LibraryFilter.jam,
+                      onTap: () => setState(() => _filter = LibraryFilter.jam),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-          if (library.tracks.isEmpty)
+          if (_filter == LibraryFilter.jam)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(_m(context), 8, _m(context), 120),
+              sliver: _jamBody(context, jam, player, l10n, otherLibraries),
+            )
+          else if (library.tracks.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
               child: library.scanning
@@ -125,6 +149,78 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _jamBody(
+    BuildContext context,
+    JamController jam,
+    PlayerController player,
+    AppLocalizations l10n,
+    List<JamRemoteLibrary> libraries,
+  ) {
+    if (libraries.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: SwEmptyState(
+          icon: Icons.devices_rounded,
+          title: l10n.jamLibraryChip,
+          message: l10n.jamLibraryEmpty,
+        ),
+      );
+    }
+    final rows = <Object>[];
+    for (final lib in libraries) {
+      rows.add(lib);
+      rows.addAll(lib.tracks);
+    }
+    return SliverList.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        if (row is JamRemoteLibrary) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(0, index == 0 ? 0 : 16, 0, 8),
+            child: Text(
+              l10n.jamLibraryFrom(row.memberName),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          );
+        }
+        final track = row as Track;
+        JamRemoteLibrary? owner;
+        for (final lib in libraries) {
+          if (lib.tracks.contains(track)) {
+            owner = lib;
+            break;
+          }
+        }
+        final queue = owner?.tracks ?? const <Track>[];
+        final trackIndex = queue.indexOf(track);
+        return TrackTile(
+          track: track,
+          playing: player.current?.title == track.title &&
+              player.current?.artist == track.artist,
+          contextQueue: queue,
+          contextIndex: trackIndex < 0 ? 0 : trackIndex,
+          playContext: QueueContext(
+            kind: QueueKind.songs,
+            name: owner == null ? l10n.jamLibraryChip : l10n.jamLibraryFrom(owner.memberName),
+          ),
+          onTap: () {
+            player.playTracks(
+              queue,
+              startIndex: trackIndex < 0 ? 0 : trackIndex,
+              context: QueueContext(
+                kind: QueueKind.songs,
+                name: owner == null
+                    ? l10n.jamLibraryChip
+                    : l10n.jamLibraryFrom(owner.memberName),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

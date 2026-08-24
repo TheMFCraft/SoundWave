@@ -16,6 +16,7 @@ class CollectionScreen extends StatelessWidget {
     required this.kind,
     required this.tracksBuilder,
     this.heroTrack,
+    this.showLike = true,
   });
 
   factory CollectionScreen.album(AlbumGroup album) {
@@ -45,6 +46,16 @@ class CollectionScreen extends StatelessWidget {
     );
   }
 
+  factory CollectionScreen.remote({required String title, required List<Track> tracks}) {
+    return CollectionScreen._(
+      title: title,
+      kind: QueueKind.songs,
+      heroTrack: tracks.isEmpty ? null : tracks.first,
+      tracksBuilder: (_) => tracks,
+      showLike: false,
+    );
+  }
+
   factory CollectionScreen.likes({required String title}) {
     return CollectionScreen._(
       title: title,
@@ -57,6 +68,7 @@ class CollectionScreen extends StatelessWidget {
   final QueueKind kind;
   final Track? heroTrack;
   final List<Track> Function(LibraryController library) tracksBuilder;
+  final bool showLike;
 
   @override
   Widget build(BuildContext context) {
@@ -131,10 +143,16 @@ class CollectionScreen extends StatelessWidget {
                         context: QueueContext(kind: kind, name: title),
                       );
                     },
-                    trailing: IconButton(
-                      onPressed: () => library.toggleLike(track.id),
-                      icon: Icon(track.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded),
-                    ),
+                    trailing: showLike
+                        ? IconButton(
+                            onPressed: () => library.toggleLike(track.id),
+                            icon: Icon(
+                              track.liked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                            ),
+                          )
+                        : null,
                   );
                 },
               ),

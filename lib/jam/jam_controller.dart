@@ -15,6 +15,7 @@ import 'jam_client.dart';
 import 'jam_discovery.dart';
 import 'jam_hooks.dart';
 import 'jam_hotspot.dart';
+import 'jam_io.dart';
 import 'jam_match.dart';
 import 'jam_models.dart';
 import 'jam_net.dart';
@@ -25,6 +26,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
   JamController({required this.player, required this.library}) {
     player.attachJam(this);
     player.addListener(_onPlayerChanged);
+    library.addListener(_onLibraryChanged);
     deviceName = deviceDisplayName();
     memberId = const Uuid().v4();
   }
@@ -50,19 +52,29 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
   List<JamMember> members = const [];
   List<JamQueueItem> items = const [];
   List<DiscoveredJam> discovered = const [];
+  List<JamRemoteLibrary> remoteLibraries = const [];
 
   final _discovery = JamDiscovery();
   final _server = JamServer();
   final _client = JamClient();
   final _position = StreamController<Duration>.broadcast();
+  final _offeredPaths = <String, String>{};
+  final _offeredTracks = <String, Track>{};
 
   Timer? _syncTimer;
   Timer? _positionTimer;
+  Timer? _catalogDebounce;
   Directory? _cacheDir;
   int _basePositionMs = 0;
   DateTime _baseAt = DateTime.now();
   bool _remotePlaying = false;
   bool _ending = false;
+  String? _playerHost;
+  int _playerPort = 0;
+  int _wantedIndex = 0;
+  bool _wantedPlay = false;
+  Completer<void>? _uploadGate;
+  DateTime _lastProgressPush = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   bool get isActive => role != JamRole.none;
@@ -129,6 +141,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     role = JamRole.player;
     _server.onMessage = _onServerMessage;
     _server.onDisconnect = (_, memberId) => _onMemberGone(memberId);
+    _server.onUpload = _handleUpload;
     port = await _server.start();
     await _discovery.publish(
       name: 'SoundWave $deviceName',
@@ -155,7 +168,8 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     await stop();
     this.pin = pin.trim();
     localIp = await localIPv4();
-    await _client.startFileServer();
+    _playerHost = host;
+    _playerPort = port;
     _client.onMessage = _onClientMessage;
     _client.onClosed = () {
       if (!_ending && isGuest) {
@@ -168,8 +182,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
       JamMessage('join', {
         'pin': this.pin,
         'member': self.toJson(),
-        'filePort': _client.filePort,
-        'host': localIp,
+        'catalog': _catalogPayload(),
       }),
     );
     role = JamRole.guest;
@@ -228,6 +241,11 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     port = 0;
     members = const [];
     items = const [];
+    remoteLibraries = const [];
+    _offeredPaths.clear();
+    _offeredTracks.clear();
+    _playerHost = null;
+    _playerPort = 0;
     hotspotActive = false;
     hotspotSsid = null;
     hotspotPassword = null;
@@ -287,8 +305,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
       return;
     }
     if (!isPlayer) return;
-    await player.runLocal(() => player.skipTo(index));
-    _broadcastState(immediate: true);
+    await _applyPlayerQueue(play: true, index: index);
   }
 
   @override
@@ -299,45 +316,23 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     bool shuffled = false,
   }) async {
     if (tracks.isEmpty) return;
-    if (isGuest) {
-      await _offerAndSend('play_tracks', tracks, startIndex: startIndex, shuffled: shuffled);
-      return;
-    }
-    if (!isPlayer) return;
-    items = [
-      for (var i = 0; i < tracks.length; i++)
-        _itemFromLocal(tracks[i], indexHint: i),
-    ];
-    await _applyPlayerQueue(play: true, index: startIndex.clamp(0, items.length - 1));
+    await _sendTracks(
+      tracks,
+      mode: 'play',
+      startIndex: startIndex,
+      shuffled: shuffled,
+    );
   }
 
   @override
   Future<void> commandAddNext(Track track) async {
-    if (isGuest) {
-      await _offerAndSend('add_next', [track]);
-      return;
-    }
-    if (!isPlayer) return;
-    final item = _itemFromLocal(track);
-    final insertAt = items.isEmpty ? 0 : (player.index + 1).clamp(0, items.length);
-    items = [...items]..insert(insertAt, item);
-    await _applyPlayerQueue(play: player.playing || items.length == 1, index: player.index);
+    await _sendTracks([track], mode: 'add_next');
   }
 
   @override
   Future<void> commandAddAll(List<Track> tracks) async {
     if (tracks.isEmpty) return;
-    if (isGuest) {
-      await _offerAndSend('add', tracks);
-      return;
-    }
-    if (!isPlayer) return;
-    if (items.isEmpty) {
-      await commandPlayTracks(tracks);
-      return;
-    }
-    items = [...items, for (final track in tracks) _itemFromLocal(track)];
-    await _applyPlayerQueue(play: player.playing, index: player.index);
+    await _sendTracks(tracks, mode: 'add');
   }
 
   @override
@@ -452,6 +447,11 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
         await _ingestRemoteTracks(message, replace: false);
       case 'add_next':
         await _ingestRemoteTracks(message, replace: false, next: true);
+      case 'play_catalog':
+        await _ingestCatalog(message);
+      case 'catalog':
+        _storeIncomingCatalog(message);
+        _broadcastCatalogs();
     }
   }
 
@@ -460,11 +460,18 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
       case 'join_ok':
         sessionId = message.data['sessionId'] as String? ?? sessionId;
         _applyState(message.data['state'] as Map? ?? const {});
+        _applyLibraries(message.data);
       case 'join_denied':
         error = message.data['reason'] as String? ?? 'Beitritt abgelehnt';
         unawaited(stop());
       case 'state':
         _applyState(message.data);
+      case 'catalogs':
+        _applyLibraries(message.data);
+      case 'need_file':
+        unawaited(_uploadRequested(message.data['token'] as String? ?? ''));
+      case 'please_offer':
+        unawaited(_offerRequested(message));
       case 'error':
         error = message.data['reason'] as String? ?? 'Jam-Fehler';
         notifyListeners();
@@ -488,22 +495,164 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     if (!members.any((item) => item.id == member.id)) {
       members = [...members, member];
     }
+    _storeCatalog(
+      memberId: member.id,
+      memberName: member.name,
+      raw: message.data['catalog'] as List?,
+    );
     notifyListeners();
     _server.sendToSocket(
       socketId,
       JamMessage('join_ok', {
         'sessionId': sessionId,
         'state': _statePayload(),
+        'libraries': _librariesPayload(),
       }),
     );
     _broadcastState(immediate: true);
+    _broadcastCatalogs();
   }
 
   void _onMemberGone(String? id) {
     if (id == null) return;
     members = members.where((member) => member.id != id).toList();
+    remoteLibraries = remoteLibraries.where((lib) => lib.memberId != id).toList();
     notifyListeners();
     _broadcastState(immediate: true);
+    _broadcastCatalogs();
+  }
+
+  Future<void> _sendTracks(
+    List<Track> tracks, {
+    required String mode,
+    int startIndex = 0,
+    bool shuffled = false,
+  }) async {
+    if (tracks.isEmpty || (!isGuest && !isPlayer)) return;
+    final start = tracks[startIndex.clamp(0, tracks.length - 1)];
+    final catalog = isJamCatalogTrack(start);
+    final group = catalog
+        ? [
+            for (final track in tracks)
+              if (parseJamCatalogUri(track.uri)?.$1 == parseJamCatalogUri(start.uri)?.$1)
+                track,
+          ]
+        : [for (final track in tracks) if (!isJamCatalogTrack(track)) track];
+    if (group.isEmpty) return;
+    final index = group.indexOf(start).clamp(0, group.length - 1);
+    if (isGuest) {
+      if (catalog) {
+        final ownerId = parseJamCatalogUri(start.uri)?.$1;
+        if (ownerId == null) return;
+        _client.send(
+          JamMessage('play_catalog', {
+            'memberId': ownerId,
+            'ids': [
+              for (final track in group) parseJamCatalogUri(track.uri)?.$2,
+            ].whereType<String>().toList(),
+            'startIndex': index,
+            'mode': mode,
+            'shuffled': shuffled,
+          }),
+        );
+        return;
+      }
+      await _offerAndSend(
+        switch (mode) {
+          'add' => 'add',
+          'add_next' => 'add_next',
+          _ => 'play_tracks',
+        },
+        group,
+        startIndex: index,
+        shuffled: shuffled,
+      );
+      return;
+    }
+    if (catalog) {
+      final ownerId = parseJamCatalogUri(start.uri)?.$1;
+      if (ownerId == null) return;
+      if (ownerId == memberId) {
+        final local = [
+          for (final track in group)
+            library.trackById(parseJamCatalogUri(track.uri)?.$2 ?? ''),
+        ].whereType<Track>().toList();
+        await _playLocalTracks(local, mode: mode, startIndex: index);
+        return;
+      }
+      _server.sendToMember(
+        ownerId,
+        JamMessage('please_offer', {
+          'ids': [
+            for (final track in group) parseJamCatalogUri(track.uri)?.$2,
+          ].whereType<String>().toList(),
+          'startIndex': index,
+          'mode': mode,
+          'shuffled': shuffled,
+        }),
+      );
+      return;
+    }
+    await _playLocalTracks(group, mode: mode, startIndex: index);
+  }
+
+  Future<void> _playLocalTracks(
+    List<Track> tracks, {
+    required String mode,
+    int startIndex = 0,
+  }) async {
+    if (tracks.isEmpty) return;
+    if (mode == 'play' || items.isEmpty) {
+      items = [
+        for (var i = 0; i < tracks.length; i++)
+          _itemFromLocal(tracks[i], indexHint: i),
+      ];
+      await _applyPlayerQueue(
+        play: true,
+        index: startIndex.clamp(0, items.length - 1),
+      );
+      return;
+    }
+    if (mode == 'add_next') {
+      final insertAt = items.isEmpty ? 0 : (player.index + 1).clamp(0, items.length);
+      items = [...items]..insertAll(insertAt, [
+        for (final track in tracks) _itemFromLocal(track),
+      ]);
+      await _applyPlayerQueue(
+        play: player.playing || items.length == tracks.length,
+        index: player.index,
+      );
+      return;
+    }
+    items = [...items, for (final track in tracks) _itemFromLocal(track)];
+    await _applyPlayerQueue(play: player.playing, index: player.index);
+  }
+
+  Future<void> _ingestCatalog(JamMessage message) async {
+    final mode = message.data['mode'] as String? ?? 'play';
+    final ownerId = message.data['memberId'] as String? ?? memberId;
+    final ids = [
+      for (final id in message.data['ids'] as List? ?? const []) '$id',
+    ];
+    final startIndex = message.data['startIndex'] as int? ?? 0;
+    final shuffled = message.data['shuffled'] as bool? ?? false;
+    if (ownerId == memberId) {
+      var tracks = [
+        for (final id in ids) library.trackById(id),
+      ].whereType<Track>().toList();
+      if (shuffled) tracks = [...tracks]..shuffle();
+      await _playLocalTracks(tracks, mode: mode, startIndex: startIndex);
+      return;
+    }
+    _server.sendToMember(
+      ownerId,
+      JamMessage('please_offer', {
+        'ids': ids,
+        'startIndex': startIndex,
+        'mode': mode,
+        'shuffled': shuffled,
+      }),
+    );
   }
 
   Future<void> _ingestRemoteTracks(
@@ -512,29 +661,21 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     bool next = false,
   }) async {
     final raw = (message.data['tracks'] as List? ?? const []).whereType<Map>();
-    final host = message.data['host'] as String?;
-    final filePort = message.data['filePort'] as int?;
     final addedBy = JamMember.fromJson(
       Map<String, dynamic>.from(message.data['member'] as Map? ?? const {}),
     );
-    final incoming = <JamQueueItem>[];
-    for (final row in raw) {
-      incoming.add(
-        await _itemFromRemote(
-          Map<String, dynamic>.from(row),
-          addedBy: addedBy,
-          host: host,
-          filePort: filePort,
-        ),
-      );
-    }
+    var incoming = <JamQueueItem>[
+      for (final row in raw)
+        await _itemFromRemote(Map<String, dynamic>.from(row), addedBy: addedBy),
+    ];
     if (incoming.isEmpty) return;
+    if (message.data['shuffled'] == true) {
+      incoming = [...incoming]..shuffle();
+    }
     if (replace || items.isEmpty) {
       items = incoming;
-      await _applyPlayerQueue(
-        play: true,
-        index: (message.data['startIndex'] as int? ?? 0).clamp(0, items.length - 1),
-      );
+      final index = (message.data['startIndex'] as int? ?? 0).clamp(0, items.length - 1);
+      await _applyPlayerQueue(play: items[index].playable, index: index);
     } else if (next) {
       final insertAt = (player.index + 1).clamp(0, items.length);
       items = [...items]..insertAll(insertAt, incoming);
@@ -543,7 +684,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
       items = [...items, ...incoming];
       await _applyPlayerQueue(play: player.playing, index: player.index);
     }
-    unawaited(_transferPending());
+    _requestMissingFiles();
   }
 
   JamQueueItem _itemFromLocal(Track track, {int indexHint = 0}) {
@@ -559,11 +700,10 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
   Future<JamQueueItem> _itemFromRemote(
     Map<String, dynamic> row, {
     required JamMember addedBy,
-    String? host,
-    int? filePort,
   }) async {
     final dto = Map<String, dynamic>.from(row['track'] as Map? ?? row);
     final token = row['token'] as String?;
+    final ext = dto['ext'] as String? ?? row['ext'] as String? ?? '.mp3';
     final match = findLocalMatch(
       library.tracks,
       title: dto['title'] as String? ?? '',
@@ -579,15 +719,14 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
         transfer: JamTransferStatus.local,
       );
     }
+    final pending = token == null || token.isEmpty;
     return JamQueueItem(
       id: const Uuid().v4(),
-      track: jamTrackFromDto(dto, uri: ''),
+      track: jamTrackFromDto(dto, uri: 'pending$ext'),
       addedById: addedBy.id,
       addedByName: addedBy.name,
-      transfer: JamTransferStatus.pending,
-      fileToken: token,
-      sourceHost: host,
-      sourcePort: filePort,
+      transfer: pending ? JamTransferStatus.failed : JamTransferStatus.pending,
+      fileToken: pending ? null : token,
     );
   }
 
@@ -600,12 +739,12 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     final payload = <Map<String, dynamic>>[];
     for (final track in tracks) {
       final token = const Uuid().v4();
-      if (localFileExists(track.uri)) {
-        _client.offer(token, track.uri);
-      }
+      final canOffer = canOfferTrack(track);
+      if (canOffer) _offeredTracks[token] = track;
       payload.add({
         'track': jamTrackToDto(track),
-        'token': localFileExists(track.uri) ? token : null,
+        'token': canOffer ? token : null,
+        'ext': jamFileExtension(track.uri),
       });
     }
     _client.send(
@@ -614,87 +753,168 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
         'startIndex': startIndex,
         'shuffled': shuffled,
         'member': self.toJson(),
-        'host': localIp,
-        'filePort': _client.filePort,
       }),
     );
   }
 
-  Future<void> _transferPending() async {
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      if (item.transfer != JamTransferStatus.pending &&
-          item.transfer != JamTransferStatus.failed) {
-        continue;
-      }
-      final host = item.sourceHost;
-      final port = item.sourcePort;
+  Future<void> _offerRequested(JamMessage message) async {
+    final ids = [for (final id in message.data['ids'] as List? ?? const []) '$id'];
+    final tracks = [
+      for (final id in ids) library.trackById(id),
+    ].whereType<Track>().toList();
+    if (tracks.isEmpty) return;
+    final mode = message.data['mode'] as String? ?? 'play';
+    await _offerAndSend(
+      switch (mode) {
+        'add' => 'add',
+        'add_next' => 'add_next',
+        _ => 'play_tracks',
+      },
+      tracks,
+      startIndex: message.data['startIndex'] as int? ?? 0,
+      shuffled: message.data['shuffled'] as bool? ?? false,
+    );
+  }
+
+  void _requestMissingFiles() {
+    final requested = <String>{};
+    for (final item in items) {
       final token = item.fileToken;
-      if (host == null || port == null || token == null) {
-        items = [...items]..[i] = item.copyWith(transfer: JamTransferStatus.failed);
-        notifyListeners();
+      if (token == null ||
+          item.transfer != JamTransferStatus.pending ||
+          !requested.add(token)) {
         continue;
       }
-      items = [...items]..[i] = item.copyWith(transfer: JamTransferStatus.transferring, progress: 0);
-      notifyListeners();
-      _broadcastState();
+      _server.sendToMember(
+        item.addedById,
+        JamMessage('need_file', {'token': token, 'itemId': item.id}),
+      );
+    }
+  }
+
+  Future<void> _uploadRequested(String token) async {
+    if (token.isEmpty) return;
+    final track = _offeredTracks[token];
+    var path = _offeredPaths[token];
+    path ??= track == null ? null : await resolveTrackPathForUpload(track);
+    final host = _playerHost;
+    if (path == null || host == null || _playerPort <= 0) return;
+    _offeredPaths[token] = path;
+    for (var attempt = 0; attempt < 6; attempt++) {
       try {
-        final dir = await _cache();
-        final dest = p.join(dir.path, '${item.id}${p.extension(item.track.title)}.bin');
-        await downloadJamFile(
-          host: host,
-          port: port,
-          token: token,
-          destPath: dest,
-          onProgress: (received, total) {
-            final progress = total <= 0 ? 0.0 : received / total;
-            items = [
-              for (var j = 0; j < items.length; j++)
-                if (j == i) items[j].copyWith(progress: progress) else items[j],
-            ];
-            notifyListeners();
-          },
-        );
-        final named = p.join(
-          dir.path,
-          '${item.id}${_guessExt(item.track.title, item.track.uri)}',
-        );
-        await File(dest).rename(named);
-        items = [...items]
-          ..[i] = item.copyWith(
-            track: Track(
-              id: item.track.id,
-              title: item.track.title,
-              artist: item.track.artist,
-              album: item.track.album,
-              uri: named,
-              genre: item.track.genre,
-              durationMs: item.track.durationMs,
-              addedAt: item.track.addedAt,
-            ),
-            transfer: JamTransferStatus.ready,
-            progress: 1,
-          );
-        await _applyPlayerQueue(play: player.playing || i == player.index, index: player.index);
+        await uploadJamFile(host: host, port: _playerPort, token: token, path: path);
+        if (path.contains('${p.separator}jam_offer${p.separator}')) {
+          try {
+            await File(path).delete();
+          } catch (_) {}
+        }
+        return;
+      } on HttpException catch (error) {
+        if (!error.message.contains('404') && !error.message.contains('unknown')) {
+          return;
+        }
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
       } catch (_) {
-        items = [...items]..[i] = item.copyWith(transfer: JamTransferStatus.failed);
-        notifyListeners();
-        _broadcastState(immediate: true);
+        await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
       }
     }
   }
 
-  String _guessExt(String title, String uri) {
-    final fromUri = p.extension(uri);
-    if (fromUri.isNotEmpty && fromUri.length <= 5) return fromUri;
-    return '.mp3';
+  Future<String?> _handleUpload(
+    String token,
+    Stream<List<int>> body,
+    int? length,
+  ) async {
+    while (_uploadGate != null) {
+      await _uploadGate!.future;
+    }
+    final gate = Completer<void>();
+    _uploadGate = gate;
+    try {
+      return await _writeUpload(token, body, length);
+    } finally {
+      _uploadGate = null;
+      gate.complete();
+    }
+  }
+
+  Future<String?> _writeUpload(
+    String token,
+    Stream<List<int>> body,
+    int? length,
+  ) async {
+    if (length != null && length > 100 * 1024 * 1024) {
+      throw const HttpException('file too large');
+    }
+    final index = items.indexWhere((item) => item.fileToken == token);
+    if (index < 0) return null;
+    final item = items[index];
+    items = [...items]
+      ..[index] = item.copyWith(transfer: JamTransferStatus.transferring, progress: 0);
+    notifyListeners();
+    final dir = await _cache();
+    final dest = File(p.join(dir.path, '$token.bin'));
+    await dest.parent.create(recursive: true);
+    final sink = dest.openWrite();
+    var received = 0;
+    try {
+      await for (final chunk in body) {
+        received += chunk.length;
+        if (received > 100 * 1024 * 1024) {
+          await sink.close();
+          await dest.delete();
+          throw const HttpException('file too large');
+        }
+        sink.add(chunk);
+        final progress = length != null && length > 0 ? received / length : 0.0;
+        items = [...items]..[index] = items[index].copyWith(progress: progress);
+        notifyListeners();
+        final now = DateTime.now();
+        if (now.difference(_lastProgressPush) > const Duration(milliseconds: 400)) {
+          _lastProgressPush = now;
+          _broadcastState();
+        }
+      }
+      await sink.close();
+    } catch (_) {
+      try {
+        await sink.close();
+        await dest.delete();
+      } catch (_) {}
+      items = [...items]..[index] = item.copyWith(transfer: JamTransferStatus.failed);
+      notifyListeners();
+      _broadcastState(immediate: true);
+      rethrow;
+    }
+    final named = p.join(dir.path, '${item.id}${jamFileExtension(item.track.uri)}');
+    await dest.rename(named);
+    items = [...items]
+      ..[index] = item.copyWith(
+        track: Track(
+          id: item.track.id,
+          title: item.track.title,
+          artist: item.track.artist,
+          album: item.track.album,
+          uri: named,
+          genre: item.track.genre,
+          durationMs: item.track.durationMs,
+          addedAt: item.track.addedAt,
+        ),
+        transfer: JamTransferStatus.ready,
+        progress: 1,
+      );
+    final play = _wantedPlay && (_wantedIndex == index || player.index == index);
+    await _applyPlayerQueue(play: play, index: _wantedIndex);
+    return named;
   }
 
   Future<void> _applyPlayerQueue({required bool play, required int index}) async {
+    _wantedPlay = play;
+    _wantedIndex = items.isEmpty ? 0 : index.clamp(0, items.length - 1);
     await player.applyJamPlayerQueue(
       tracks: [for (final item in items) item.track],
-      index: items.isEmpty ? 0 : index.clamp(0, items.length - 1),
-      play: play,
+      index: _wantedIndex,
+      play: play && (items.isEmpty || items[_wantedIndex].playable),
     );
     notifyListeners();
     _broadcastState(immediate: true);
@@ -762,6 +982,86 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     if (isPlayer) _broadcastState();
   }
 
+  void _onLibraryChanged() {
+    if (!isActive) return;
+    _catalogDebounce?.cancel();
+    _catalogDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (isPlayer) {
+        _broadcastCatalogs();
+      } else if (isGuest) {
+        _client.send(
+          JamMessage('catalog', {
+            'member': self.toJson(),
+            'tracks': _catalogPayload(),
+          }),
+        );
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> _catalogPayload() {
+    final tracks = [...library.tracks]
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    return [
+      for (final track in tracks.take(2500)) jamCatalogToDto(track),
+    ];
+  }
+
+  List<Map<String, dynamic>> _librariesPayload() {
+    return [
+      {
+        'memberId': memberId,
+        'memberName': deviceName,
+        'tracks': _catalogPayload(),
+      },
+      for (final lib in remoteLibraries) lib.toJson(),
+    ];
+  }
+
+  void _broadcastCatalogs() {
+    if (!isPlayer) return;
+    _server.broadcast(JamMessage('catalogs', {'libraries': _librariesPayload()}));
+    notifyListeners();
+  }
+
+  void _applyLibraries(Map<dynamic, dynamic> raw) {
+    remoteLibraries = [
+      for (final row in (raw['libraries'] as List? ?? const []).whereType<Map>())
+        JamRemoteLibrary.fromJson(Map<String, dynamic>.from(row)),
+    ].where((lib) => lib.memberId != memberId).toList();
+    notifyListeners();
+  }
+
+  void _storeIncomingCatalog(JamMessage message) {
+    final member = JamMember.fromJson(
+      Map<String, dynamic>.from(message.data['member'] as Map? ?? const {}),
+    );
+    _storeCatalog(
+      memberId: member.id,
+      memberName: member.name,
+      raw: message.data['tracks'] as List? ?? message.data['catalog'] as List?,
+    );
+  }
+
+  void _storeCatalog({
+    required String memberId,
+    required String memberName,
+    required List<dynamic>? raw,
+  }) {
+    if (memberId.isEmpty || memberId == this.memberId) return;
+    final lib = JamRemoteLibrary.fromJson({
+      'memberId': memberId,
+      'memberName': memberName,
+      'tracks': raw ?? const [],
+    });
+    remoteLibraries = [
+      for (final existing in remoteLibraries)
+        if (existing.memberId != memberId) existing,
+      lib,
+    ];
+    notifyListeners();
+  }
+
   void _startPositionPush() {
     _positionTimer?.cancel();
     _positionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -813,6 +1113,8 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
   void dispose() {
     unawaited(stop());
     player.removeListener(_onPlayerChanged);
+    library.removeListener(_onLibraryChanged);
+    _catalogDebounce?.cancel();
     _position.close();
     super.dispose();
   }

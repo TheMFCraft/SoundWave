@@ -33,6 +33,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
   List<JamMember> members = const [];
   List<JamQueueItem> items = const [];
   List<DiscoveredJam> discovered = const [];
+  List<JamRemoteLibrary> remoteLibraries = const [];
 
   @override
   bool get isActive => false;

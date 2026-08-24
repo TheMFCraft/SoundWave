@@ -76,6 +76,20 @@ void main() {
     );
   });
 
+  test('jam catalog uri roundtrip', () {
+    final uri = jamCatalogUri('member-1', 'track/with spaces');
+    final parsed = parseJamCatalogUri(uri);
+    expect(parsed?.$1, 'member-1');
+    expect(parsed?.$2, 'track/with spaces');
+    final track = jamCatalogFromDto(
+      {'id': 'abc', 'title': 'Night', 'artist': 'Nova', 'durationMs': 120000},
+      memberId: 'host-id',
+    );
+    expect(isJamCatalogTrack(track), isTrue);
+    expect(parseJamCatalogUri(track.uri)?.$2, 'abc');
+    expect(jamCatalogToDto(track)['id'], 'abc');
+  });
+
   test('join info parses uri and host port pin', () {
     final fromUri = JamJoinInfo.tryParse('soundwave://jam?h=10.0.0.4&p=47831&c=042001');
     expect(fromUri?.host, '10.0.0.4');

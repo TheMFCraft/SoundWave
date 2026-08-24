@@ -2,7 +2,7 @@ enum AppLanguage { system, en, de }
 
 enum PlayRepeat { off, all, one }
 
-enum LibraryFilter { all, playlists, artists, albums }
+enum LibraryFilter { all, playlists, artists, albums, jam }
 
 enum TrackSort { title, artist, recentlyAdded, mostPlayed }
 

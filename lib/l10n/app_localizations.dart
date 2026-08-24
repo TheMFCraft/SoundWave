@@ -1087,6 +1087,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On this device'**
   String get jamTransferLocal;
+
+  /// No description provided for @jamLibraryChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices'**
+  String get jamLibraryChip;
+
+  /// No description provided for @jamLibraryFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From {name}'**
+  String jamLibraryFrom(String name);
+
+  /// No description provided for @jamLibraryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No songs from the other device yet. The list appears once the jam is connected.'**
+  String get jamLibraryEmpty;
+
+  /// No description provided for @jamLibraryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs on other devices in this jam. Tap to play them on the player.'**
+  String get jamLibraryBody;
 }
 
 class _AppLocalizationsDelegate

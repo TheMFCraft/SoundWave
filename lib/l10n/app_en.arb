@@ -177,5 +177,10 @@
   "@jamTransferProgress": {"placeholders": {"percent": {"type": "int"}}},
   "jamTransferFailed": "Transfer failed",
   "jamTransferReady": "Ready",
-  "jamTransferLocal": "On this device"
+  "jamTransferLocal": "On this device",
+  "jamLibraryChip": "Other devices",
+  "jamLibraryFrom": "From {name}",
+  "@jamLibraryFrom": {"placeholders": {"name": {"type": "String"}}},
+  "jamLibraryEmpty": "No songs from the other device yet. The list appears once the jam is connected.",
+  "jamLibraryBody": "Songs on other devices in this jam. Tap to play them on the player."
 }

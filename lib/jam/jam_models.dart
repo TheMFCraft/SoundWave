@@ -110,6 +110,36 @@ class JamQueueItem {
   }
 }
 
+class JamRemoteLibrary {
+  const JamRemoteLibrary({
+    required this.memberId,
+    required this.memberName,
+    required this.tracks,
+  });
+
+  final String memberId;
+  final String memberName;
+  final List<Track> tracks;
+
+  Map<String, dynamic> toJson() => {
+        'memberId': memberId,
+        'memberName': memberName,
+        'tracks': [for (final track in tracks) jamCatalogToDto(track)],
+      };
+
+  factory JamRemoteLibrary.fromJson(Map<String, dynamic> json) {
+    final memberId = json['memberId'] as String? ?? '';
+    return JamRemoteLibrary(
+      memberId: memberId,
+      memberName: json['memberName'] as String? ?? '',
+      tracks: [
+        for (final row in (json['tracks'] as List? ?? const []).whereType<Map>())
+          jamCatalogFromDto(Map<String, dynamic>.from(row), memberId: memberId),
+      ],
+    );
+  }
+}
+
 class DiscoveredJam {
   const DiscoveredJam({
     required this.name,
@@ -162,15 +192,32 @@ class JamJoinInfo {
   }
 }
 
-Map<String, dynamic> jamTrackToDto(Track track) => {
-      'id': track.id,
-      'title': track.title,
-      'artist': track.artist,
-      'album': track.album,
-      'durationMs': track.durationMs,
-      'genre': track.genre,
-      'uri': track.uri,
-    };
+const jamCatalogScheme = 'jamcat';
+
+Map<String, dynamic> jamTrackToDto(Track track) {
+  final catalog = parseJamCatalogUri(track.uri);
+  return {
+    'id': catalog?.$2 ?? track.id,
+    'title': track.title,
+    'artist': track.artist,
+    'album': track.album,
+    'durationMs': track.durationMs,
+    'genre': track.genre,
+    'ext': jamFileExtension(track.uri),
+  };
+}
+
+Map<String, dynamic> jamCatalogToDto(Track track) {
+  final catalog = parseJamCatalogUri(track.uri);
+  return {
+    'id': catalog?.$2 ?? track.id,
+    'title': track.title,
+    'artist': track.artist,
+    'album': track.album,
+    'durationMs': track.durationMs,
+    'genre': track.genre,
+  };
+}
 
 Track jamTrackFromDto(Map<String, dynamic> json, {required String uri}) {
   return Track(
@@ -183,4 +230,42 @@ Track jamTrackFromDto(Map<String, dynamic> json, {required String uri}) {
     durationMs: json['durationMs'] as int? ?? 0,
     addedAt: DateTime.now(),
   );
+}
+
+Track jamCatalogFromDto(Map<String, dynamic> json, {required String memberId}) {
+  final originalId = json['id'] as String? ?? '';
+  return Track(
+    id: 'jamcat_${memberId}_$originalId',
+    title: json['title'] as String? ?? '',
+    artist: json['artist'] as String? ?? '',
+    album: json['album'] as String? ?? '',
+    uri: jamCatalogUri(memberId, originalId),
+    genre: json['genre'] as String? ?? '',
+    durationMs: json['durationMs'] as int? ?? 0,
+    addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+  );
+}
+
+String jamCatalogUri(String memberId, String originalId) {
+  return '$jamCatalogScheme://$memberId/${Uri.encodeComponent(originalId)}';
+}
+
+(String memberId, String originalId)? parseJamCatalogUri(String uri) {
+  const prefix = '$jamCatalogScheme://';
+  if (!uri.startsWith(prefix)) return null;
+  final rest = uri.substring(prefix.length);
+  final slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  final memberId = rest.substring(0, slash);
+  final originalId = Uri.decodeComponent(rest.substring(slash + 1));
+  if (memberId.isEmpty || originalId.isEmpty) return null;
+  return (memberId, originalId);
+}
+
+bool isJamCatalogTrack(Track track) => track.uri.startsWith('$jamCatalogScheme://');
+
+String jamFileExtension(String uri) {
+  final match = RegExp(r'\.([a-zA-Z0-9]{2,5})$').firstMatch(uri.split('?').first);
+  if (match == null) return '.mp3';
+  return '.${match.group(1)!.toLowerCase()}';
 }

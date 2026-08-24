@@ -8,6 +8,7 @@ import '../../jam/jam.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/colors.dart';
 import '../app_shell.dart';
+import '../library/collection_screen.dart';
 
 class JamScreen extends StatefulWidget {
   const JamScreen({super.key});
@@ -187,6 +188,33 @@ class _JamScreenState extends State<JamScreen> {
             title: Text(member.name),
             subtitle: Text(member.isPlayer ? l10n.jamRolePlayer : l10n.jamRoleGuest),
           ),
+        if (jam.remoteLibraries.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(l10n.jamLibraryChip, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            l10n.jamLibraryBody,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: SwColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          for (final lib in jam.remoteLibraries)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.library_music_outlined),
+              title: Text(l10n.jamLibraryFrom(lib.memberName)),
+              subtitle: Text(l10n.tracksCount(lib.tracks.length)),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CollectionScreen.remote(
+                      title: l10n.jamLibraryFrom(lib.memberName),
+                      tracks: lib.tracks,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
         const SizedBox(height: 16),
         FilledButton.tonal(
           onPressed: jam.stop,
