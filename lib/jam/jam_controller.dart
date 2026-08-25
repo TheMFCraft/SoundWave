@@ -602,7 +602,7 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     int startIndex = 0,
   }) async {
     if (tracks.isEmpty) return;
-    if (mode == 'play' || items.isEmpty) {
+    if (mode == 'play') {
       items = [
         for (var i = 0; i < tracks.length; i++)
           _itemFromLocal(tracks[i], indexHint: i),
@@ -613,15 +613,20 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
       );
       return;
     }
+    if (items.isEmpty) {
+      items = [
+        for (var i = 0; i < tracks.length; i++)
+          _itemFromLocal(tracks[i], indexHint: i),
+      ];
+      await _applyPlayerQueue(play: false, index: 0);
+      return;
+    }
     if (mode == 'add_next') {
-      final insertAt = items.isEmpty ? 0 : (player.index + 1).clamp(0, items.length);
+      final insertAt = (player.index + 1).clamp(0, items.length);
       items = [...items]..insertAll(insertAt, [
         for (final track in tracks) _itemFromLocal(track),
       ]);
-      await _applyPlayerQueue(
-        play: player.playing || items.length == tracks.length,
-        index: player.index,
-      );
+      await _applyPlayerQueue(play: player.playing, index: player.index);
       return;
     }
     items = [...items, for (final track in tracks) _itemFromLocal(track)];
@@ -672,10 +677,13 @@ class JamController extends ChangeNotifier implements JamPlaybackGate {
     if (message.data['shuffled'] == true) {
       incoming = [...incoming]..shuffle();
     }
-    if (replace || items.isEmpty) {
+    if (replace) {
       items = incoming;
       final index = (message.data['startIndex'] as int? ?? 0).clamp(0, items.length - 1);
-      await _applyPlayerQueue(play: items[index].playable, index: index);
+      await _applyPlayerQueue(play: true, index: index);
+    } else if (items.isEmpty) {
+      items = incoming;
+      await _applyPlayerQueue(play: false, index: 0);
     } else if (next) {
       final insertAt = (player.index + 1).clamp(0, items.length);
       items = [...items]..insertAll(insertAt, incoming);
