@@ -108,7 +108,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(l10n.aboutBody, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: SwColors.onSurfaceVariant)),
             const SizedBox(height: 8),
-            Text(l10n.version('1.1.2'), style: Theme.of(context).textTheme.labelSmall),
+            Text(l10n.version('1.1.3'), style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
       ),
